@@ -1,6 +1,6 @@
 use chromiumoxide::{Browser, BrowserConfig};
 use nu_plugin::{
-    EngineInterface, EvaluatedCall, JsonSerializer, Plugin, SimplePluginCommand, serve_plugin,
+    EngineInterface, EvaluatedCall, MsgPackSerializer, Plugin, SimplePluginCommand, serve_plugin,
 };
 use nu_protocol::{Category, Example, LabeledError, Signature, SyntaxShape, Value};
 use smol::prelude::*;
@@ -143,5 +143,5 @@ fn browse_page(url: &str, stealth: bool, disable_headless: bool) -> Result<Strin
 }
 
 fn main() {
-    serve_plugin(&HttpBrowse, JsonSerializer)
+    serve_plugin(&HttpBrowse, MsgPackSerializer)
 }
