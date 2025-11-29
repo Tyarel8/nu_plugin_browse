@@ -1,9 +1,9 @@
 use chromiumoxide::{Browser, BrowserConfig};
+use futures::StreamExt;
 use nu_plugin::{
     EngineInterface, EvaluatedCall, MsgPackSerializer, Plugin, SimplePluginCommand, serve_plugin,
 };
 use nu_protocol::{Category, Example, LabeledError, Signature, SyntaxShape, Value};
-use smol::prelude::*;
 use std::error::Error;
 
 #[derive(Clone)]
@@ -68,7 +68,7 @@ impl SimplePluginCommand for HttpBrowse {
 }
 
 fn browse_page(url: &str, stealth: bool, disable_headless: bool) -> Result<String, Box<dyn Error>> {
-    smol::block_on(async {
+    tokio::runtime::Runtime::new()?.block_on(async {
         let mut browser_config = BrowserConfig::builder().port(0);
         if disable_headless {
             browser_config = browser_config.with_head()
@@ -76,8 +76,7 @@ fn browse_page(url: &str, stealth: bool, disable_headless: bool) -> Result<Strin
 
         let (mut browser, mut handler) = Browser::launch(browser_config.build()?).await?;
 
-        let _task =
-            smol::spawn(async move { while let Some(_event) = handler.next().await {} }).detach();
+        let _task = tokio::spawn(async move { while let Some(_event) = handler.next().await {} });
 
         let page = browser.new_page(url).await?;
 
