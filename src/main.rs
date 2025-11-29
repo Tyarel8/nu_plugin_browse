@@ -4,7 +4,7 @@ use nu_plugin::{
     EngineInterface, EvaluatedCall, MsgPackSerializer, Plugin, SimplePluginCommand, serve_plugin,
 };
 use nu_protocol::{Category, Example, LabeledError, Signature, SyntaxShape, Value};
-use std::error::Error;
+use std::{error::Error, time::Duration};
 
 #[derive(Clone)]
 struct HttpBrowse;
@@ -30,6 +30,12 @@ impl SimplePluginCommand for HttpBrowse {
             .required("url", SyntaxShape::String, "The URL to browse")
             .switch("no-stealth", "Disable stealth mode", None)
             .switch("with-head", "Disable headless mode", None)
+            .named(
+                "wait",
+                SyntaxShape::Duration,
+                "Time to wait before retrieving html",
+                Some('w'),
+            )
             .category(Category::Network)
     }
 
@@ -59,15 +65,21 @@ impl SimplePluginCommand for HttpBrowse {
         let url: String = call.req(0)?;
         let disable_stealth = call.has_flag("no-stealth")?;
         let disable_headless = call.has_flag("with-head")?;
+        let wait = call.get_flag::<Duration>("wait")?;
 
-        match browse_page(&url, !disable_stealth, disable_headless) {
+        match browse_page(&url, !disable_stealth, disable_headless, wait) {
             Ok(html) => Ok(Value::string(html, call.head)),
             Err(e) => Err(LabeledError::new(format!("{e}")).with_label("browse failed", call.head)),
         }
     }
 }
 
-fn browse_page(url: &str, stealth: bool, disable_headless: bool) -> Result<String, Box<dyn Error>> {
+fn browse_page(
+    url: &str,
+    stealth: bool,
+    disable_headless: bool,
+    wait: Option<Duration>,
+) -> Result<String, Box<dyn Error>> {
     tokio::runtime::Runtime::new()?.block_on(async {
         let mut browser_config = BrowserConfig::builder().port(0);
         if disable_headless {
@@ -82,6 +94,10 @@ fn browse_page(url: &str, stealth: bool, disable_headless: bool) -> Result<Strin
 
         if stealth {
             page.enable_stealth_mode().await?;
+        }
+
+        if let Some(duration) = wait {
+            tokio::time::sleep(duration).await;
         }
 
         page.evaluate(
