@@ -1,14 +1,14 @@
 [package]
-name = "nu_plugin_browse"
-repository = "https://github.com/Tyarel8/nu_plugin_browse"
+name        = "nu_plugin_browse"
+version     = "0.7.0"
+edition     = "2024"
 description = "A nushell plugin to make http requests with a headless browser"
-license = "MIT"
-version = "0.6.0"
-edition = "2024"
+repository  = "https://github.com/Tyarel8/nu_plugin_browse"
+license     = "MIT"
 
 [dependencies]
 chromiumoxide = "0.9.1"
-futures = "0.3.32"
-nu-plugin = "0.113.0"
-nu-protocol = "0.113.0"
-tokio = { version = "1.52.3", features = ["full"] }
+futures       = "0.3.32"
+nu-plugin     = "0.113.0"
+nu-protocol   = "0.113.0"
+tokio         = { version = "1.52.3", features = ["full"] }
