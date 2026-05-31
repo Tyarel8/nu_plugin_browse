@@ -36,6 +36,12 @@ impl SimplePluginCommand for HttpBrowse {
                 "Time to wait before retrieving html",
                 Some('w'),
             )
+            .named(
+                "wait-css",
+                SyntaxShape::String,
+                "CSS selector to wait for instead of network idle",
+                None,
+            )
             .category(Category::Network)
     }
 
@@ -66,12 +72,21 @@ impl SimplePluginCommand for HttpBrowse {
         let disable_stealth = call.has_flag("no-stealth")?;
         let disable_headless = call.has_flag("with-head")?;
         let wait = call.get_flag::<Duration>("wait")?;
+        let wait_css = call.get_flag::<String>("wait-css")?;
 
-        match browse_page(&url, !disable_stealth, disable_headless, wait) {
+        match browse_page(&url, !disable_stealth, disable_headless, wait, wait_css) {
             Ok(html) => Ok(Value::string(html, call.head)),
             Err(e) => Err(LabeledError::new(format!("{e}")).with_label("browse failed", call.head)),
         }
     }
+}
+
+fn escape_js_string(s: &str) -> String {
+    s.replace('\\', r"\\")
+        .replace('\'', r"\'")
+        .replace('\n', r"\n")
+        .replace('\r', r"\r")
+        .replace('\t', r"\t")
 }
 
 fn browse_page(
@@ -79,6 +94,7 @@ fn browse_page(
     stealth: bool,
     disable_headless: bool,
     wait: Option<Duration>,
+    wait_css: Option<String>,
 ) -> Result<String, Box<dyn Error>> {
     tokio::runtime::Runtime::new()?.block_on(async {
         let mut browser_config = BrowserConfig::builder().port(0);
@@ -100,8 +116,43 @@ fn browse_page(
             tokio::time::sleep(duration).await;
         }
 
-        page.evaluate(
-            r#"() =>
+        if let Some(selector) = wait_css {
+            let escaped = escape_js_string(&selector);
+            page.evaluate(
+                format!(
+                    r#"() => new Promise((resolve) => {{
+  const selector = '{escaped}';
+  const el = document.querySelector(selector);
+  if (el) {{ resolve('css-selector-found'); return; }}
+  const observer = new MutationObserver(() => {{
+    if (document.querySelector(selector)) {{
+      observer.disconnect();
+      resolve('css-selector-found');
+    }}
+  }});
+  observer.observe(document.body || document.documentElement, {{
+    childList: true,
+    subtree: true,
+  }});
+  const interval = setInterval(() => {{
+    if (document.querySelector(selector)) {{
+      clearInterval(interval);
+      observer.disconnect();
+      resolve('css-selector-found');
+    }}
+  }}, 200);
+  setTimeout(() => {{
+    clearInterval(interval);
+    observer.disconnect();
+    resolve('css-selector-timeout');
+  }}, 30000);
+}})"#,
+                ),
+            )
+            .await?;
+        } else {
+            page.evaluate(
+                r#"() =>
   new Promise((resolve) => {
     let activeRequests = 0;
     let idleTimer;
@@ -158,8 +209,9 @@ fn browse_page(
       }
     }, 30000);
   })"#,
-        )
-        .await?;
+            )
+            .await?;
+        }
 
         let html = page.content().await?;
         browser.close().await?;
