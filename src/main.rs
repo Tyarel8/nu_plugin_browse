@@ -105,10 +105,15 @@ fn browse_page(
   new Promise((resolve) => {
     let activeRequests = 0;
     let idleTimer;
+    let settled = false;
 
     const done = (label) => {
+      if (settled) return;
       clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => resolve(`${label}-network-idle`), 500);
+      idleTimer = setTimeout(() => {
+        settled = true;
+        resolve(`${label}-network-idle`);
+      }, 500);
     };
 
     const origOpen = XMLHttpRequest.prototype.open;
@@ -118,8 +123,8 @@ fn browse_page(
         clearTimeout(idleTimer);
       });
       this.addEventListener('loadend', () => {
-        activeRequests--;
-        if (activeRequests <= 0) done('xhr');
+        activeRequests = Math.max(0, activeRequests - 1);
+        if (activeRequests === 0) done('xhr');
       });
       origOpen.apply(this, args);
     };
@@ -129,11 +134,10 @@ fn browse_page(
       activeRequests++;
       clearTimeout(idleTimer);
       try {
-        const response = await origFetch.apply(this, args);
-        return response;
+        return await origFetch.apply(this, args);
       } finally {
-        activeRequests--;
-        if (activeRequests <= 0) done('fetch');
+        activeRequests = Math.max(0, activeRequests - 1);
+        if (activeRequests === 0) done('fetch');
       }
     };
 
@@ -146,6 +150,13 @@ fn browse_page(
     };
 
     maybeResolveImmediately();
+
+    setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve('timeout-network-idle');
+      }
+    }, 30000);
   })"#,
         )
         .await?;
